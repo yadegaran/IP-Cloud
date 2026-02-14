@@ -61,8 +61,8 @@ fun ConverterScreen(vm: ScannerViewModel) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
     val defaultUrls = listOf(
-        "https://raw.githubusercontent.com/MatinGhanbari/v2ray-configs/main/subscriptions/v2ray/all_sub.txt",
-        "https://raw.githubusercontent.com/10ium/V2RayAggregator/master/sub/sub_merge.txt"
+        "https://raw.githubusercontent.com/10ium/V2RayAggregator/master/sub/sub_merge.txt",
+        "https://github.com/Epodonios/v2ray-configs/raw/main/All_Configs_Sub.txt"
     )
 
     LaunchedEffect(vm.selectedIpForConverter.value) {
