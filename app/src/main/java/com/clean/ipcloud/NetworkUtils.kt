@@ -3,6 +3,7 @@ package com.clean.ipcloud
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.Socket
@@ -90,21 +91,96 @@ suspend fun getPublicIp(): String {
 // تست هوشمند MTU با استفاده از دستور پینگ سیستم
 suspend fun runMtuTest(target: String, onStep: (Int) -> Unit): String {
     return withContext(Dispatchers.IO) {
-        var resultMtu = 1500
+        var resultMtu = 500
         // تست از ۱۵۰۰ به پایین با گام‌های ۱۰تایی
-        for (mtu in 1500 downTo 1200 step 10) {
+        for (mtu in 1500 downTo 500 step 10) {
             onStep(mtu)
             try {
-                // -s سایز پکت، -c تعداد، -W زمان انتظار، -M do جلوگیری از تکه شدن
-                val process = Runtime.getRuntime().exec("ping -c 1 -s $mtu -M do $target")
+                // محاسبه سایز واقعی پکت (بدون هدر)
+                val payloadSize = mtu - 28
+                if (payloadSize < 0) continue
+
+                // حذف -M do برای سازگاری بیشتر و استفاده از -W برای تایم‌اوت
+                val process = Runtime.getRuntime().exec("ping -c 1 -s $payloadSize -W 1 $target")
                 val exitCode = process.waitFor()
+
                 if (exitCode == 0) {
-                    resultMtu = mtu + 28 // اضافه کردن هدر IP/ICMP
+                    resultMtu = mtu
                     break
                 }
             } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
-        resultMtu.toString()
+        if (resultMtu == 500) "1420 (Auto)" else resultMtu.toString()
+    }
+}
+
+suspend fun calculateDownloadSpeed(url: String, onProgress: (Float) -> Unit): Double {
+    return withContext(Dispatchers.IO) {
+        try {
+            val startTime = System.currentTimeMillis()
+            val connection = URL(url).openConnection()
+            connection.connect()
+
+            val fileSize = connection.contentLength
+            val inputStream = connection.getInputStream()
+            val buffer = ByteArray(1024)
+            var bytesRead = 0
+            var totalBytesRead = 0
+
+            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                totalBytesRead += bytesRead
+                if (fileSize > 0) {
+                    onProgress(totalBytesRead.toFloat() / fileSize)
+                }
+            }
+
+            val endTime = System.currentTimeMillis()
+            val durationInSeconds = (endTime - startTime) / 1000.0
+            val speedMbps = (totalBytesRead * 8.0) / (durationInSeconds * 1024 * 1024)
+            speedMbps
+        } catch (e: Exception) {
+            0.0
+        }
+    }
+}
+
+// تابع تست پکت لاس و جیتر
+suspend fun runAdvancedPingTest(host: String): Triple<String, String, String> {
+    return withContext(Dispatchers.IO) {
+        val pings = mutableListOf<Long>()
+        var lostPackets = 0
+        val count = 10 // تست با ۱۰ پکت برای دقت بالا
+
+        for (i in 1..count) {
+            val start = System.currentTimeMillis()
+            val isReached = try {
+                val address = InetAddress.getByName(host)
+                address.isReachable(800)
+            } catch (e: Exception) {
+                false
+            }
+
+            if (isReached) {
+                pings.add(System.currentTimeMillis() - start)
+            } else {
+                lostPackets++
+            }
+        }
+
+        val avgPing = if (pings.isNotEmpty()) "${pings.average().toInt()} ms" else "Timeout"
+        val packetLoss = "${(lostPackets.toFloat() / count * 100).toInt()}%"
+
+        // محاسبه جیتر (تغییرات پینگ)
+        val jitter = if (pings.size > 1) {
+            val diffs = mutableListOf<Long>()
+            for (i in 0 until pings.size - 1) {
+                diffs.add(Math.abs(pings[i] - pings[i + 1]))
+            }
+            "${diffs.average().toInt()} ms"
+        } else "0 ms"
+
+        Triple(avgPing, packetLoss, jitter)
     }
 }

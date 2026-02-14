@@ -113,6 +113,12 @@ fun MainNavigationScreen(vm: ScannerViewModel) {
                     label = { Text("ابزار شبکه") },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) }
                 )
+                NavigationBarItem(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
+                    label = { Text("تست سرعت") },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                )
             }
         }
     ) { padding ->
@@ -122,6 +128,7 @@ fun MainNavigationScreen(vm: ScannerViewModel) {
                 1 -> ConverterScreen(vm)
                 2 -> DnsFinderScreen(vm)
                 3 -> NetworkToolsScreen(vm)
+                4 -> SpeedTestScreen(vm)
             }
         }
     }
