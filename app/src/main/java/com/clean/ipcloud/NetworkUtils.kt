@@ -4,8 +4,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.Socket
 import java.net.URL
+import java.util.Collections
 
 object NetworkUtils {
 
@@ -56,3 +58,53 @@ object NetworkUtils {
     }
 }
 
+
+// دریافت آی‌پی داخلی گوشی
+fun getLocalIpAddress(): String {
+    try {
+        val interfaces = NetworkInterface.getNetworkInterfaces()
+        for (intf in Collections.list(interfaces)) {
+            val addrs = Collections.list(intf.inetAddresses)
+            for (addr in addrs) {
+                if (!addr.isLoopbackAddress && addr.hostAddress.contains(".")) {
+                    return addr.hostAddress
+                }
+            }
+        }
+    } catch (ex: Exception) {
+    }
+    return "نامشخص"
+}
+
+// دریافت آی‌پی عمومی (از طریق سرویس icanhazip)
+suspend fun getPublicIp(): String {
+    return withContext(Dispatchers.IO) {
+        try {
+            URL("https://icanhazip.com").readText().trim()
+        } catch (e: Exception) {
+            "عدم اتصال"
+        }
+    }
+}
+
+// تست هوشمند MTU با استفاده از دستور پینگ سیستم
+suspend fun runMtuTest(target: String, onStep: (Int) -> Unit): String {
+    return withContext(Dispatchers.IO) {
+        var resultMtu = 1500
+        // تست از ۱۵۰۰ به پایین با گام‌های ۱۰تایی
+        for (mtu in 1500 downTo 1200 step 10) {
+            onStep(mtu)
+            try {
+                // -s سایز پکت، -c تعداد، -W زمان انتظار، -M do جلوگیری از تکه شدن
+                val process = Runtime.getRuntime().exec("ping -c 1 -s $mtu -M do $target")
+                val exitCode = process.waitFor()
+                if (exitCode == 0) {
+                    resultMtu = mtu + 28 // اضافه کردن هدر IP/ICMP
+                    break
+                }
+            } catch (e: Exception) {
+            }
+        }
+        resultMtu.toString()
+    }
+}

@@ -100,11 +100,17 @@ fun MainNavigationScreen(vm: ScannerViewModel) {
                     label = { Text("مبدل") },
                     icon = { Icon(Icons.Default.Build, contentDescription = null) }
                 )
-                // اضافه شدن تب سوم
+
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
                     label = { Text("DNS یاب") },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = null) }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    label = { Text("ابزار شبکه") },
                     icon = { Icon(Icons.Default.Settings, contentDescription = null) }
                 )
             }
@@ -115,6 +121,7 @@ fun MainNavigationScreen(vm: ScannerViewModel) {
                 0 -> ScannerApp(vm)
                 1 -> ConverterScreen(vm)
                 2 -> DnsFinderScreen(vm)
+                3 -> NetworkToolsScreen(vm)
             }
         }
     }
