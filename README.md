@@ -7,7 +7,7 @@
 ### 📥 دانلود و نصب
 برای دریافت آخرین نسخه آماده نصب، روی دکمه زیر کلیک کنید:
 
-[![Download IP-Cloud](https://img.shields.io/badge/Download-APK-green?style=for-the-badge&logo=android)](https://github.com/yadegaran/IP-Cloud/releases/latest/download/IP-Cloud-V1.apk)
+[![Download IP-Cloud](https://img.shields.io/badge/Download-APK-green?style=for-the-badge&logo=android)](https://github.com/yadegaran/Tools-Networrk/releases/latest/download/app.apk)
 
 ---
 
@@ -18,7 +18,7 @@
 * **🌐 ابزارهای شبکه (Network Tools):** دسترسی به ابزارهای کاربردی برای تحلیل شبکه.
 * **🔎 جستجوی DNS:** قابلیت یافتن و بررسی بهترین DNSها برای بهبود سرعت اینترنت.
 * **🎨 رابط کاربری مدرن:** طراحی شده با Google Compose، کاملاً بهینه و چشم‌نواز.
-* **🌙 پشتیبانی از حالت شب/روز:** سازگاری کامل با تم سیستم.
+.
 
 ---
 
