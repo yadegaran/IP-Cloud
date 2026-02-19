@@ -1,8 +1,5 @@
 package com.tools.net
 
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -41,6 +38,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDrawerState
@@ -66,19 +64,15 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import org.json.JSONObject
 
-// تعریف مسیرها (اسکنر از منو حذف و به Home تبدیل شد)
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    object ScannerHome : Screen("scanner", "اسکنر ای پی", Icons.Default.Search)
-    object Converter : Screen("converter", "مبدل کانفیگ", Icons.Default.Build)
-    object DnsFinder : Screen("dns", "DNS یاب", Icons.Default.Settings)
-    object NetworkTools : Screen("tools", "تست شبکه", Icons.Default.Info)
-    object SpeedTest : Screen("speed", "تست سرعت", Icons.Default.PlayArrow)
-    object FreeConfigs : Screen("free_configs", "کانفیگ رایگان", Icons.Default.Refresh)
+    data object ScannerHome : Screen("scanner", "اسکنر ای پی", Icons.Default.Search)
+    data object Converter : Screen("converter", "مبدل کانفیگ", Icons.Default.Build)
+    data object DnsFinder : Screen("dns", "DNS یاب", Icons.Default.Settings)
+    data object NetworkTools : Screen("tools", "تست شبکه", Icons.Default.Info)
+    data object SpeedTest : Screen("speed", "تست سرعت", Icons.Default.PlayArrow)
+    data object FreeConfigs : Screen("free_configs", "کانفیگ رایگان", Icons.Default.Refresh)
 }
 
 class MainActivity : ComponentActivity() {
@@ -86,9 +80,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val vm = ScannerViewModel()
         setContent {
-
-
-            // تعریف تم رنگی سفارشی متریال ۳
             val customColorScheme = lightColorScheme(
                 primary = Color(0xFF1976D2),
                 onPrimary = Color.White,
@@ -109,16 +100,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainNavigationApp(vm: ScannerViewModel) {
     val context = LocalContext.current
-    val currentVersionCode = try {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-            context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt()
-        } else {
-            @Suppress("DEPRECATION")
-            context.packageManager.getPackageInfo(context.packageName, 0).versionCode
-        }
-    } catch (e: Exception) {
-        1
-    }
+    val currentVersionCode = remember { UpdateManager.updateManager.getCurrentVersionCode(context) }
 
     var showDialog by remember { mutableStateOf(false) }
     var updateData by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -127,18 +109,16 @@ fun MainNavigationApp(vm: ScannerViewModel) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    // چک کردن آپدیت به محض اجرای برنامه
     LaunchedEffect(Unit) {
-        val info = fetchUpdateInfo()
+        val info = UpdateManager.updateManager.fetchUpdateInfo()
         if (info != null && info.versionCode > currentVersionCode) {
             updateData = info
             showDialog = true
         }
     }
 
-    // نمایش دیالوگ آپدیت
     if (showDialog && updateData != null) {
-        UpdateDialog(updateData!!, { showDialog = false }, context)
+        UpdateDialog(updateData!!) { showDialog = false }
     }
 
     ModalNavigationDrawer(
@@ -148,7 +128,6 @@ fun MainNavigationApp(vm: ScannerViewModel) {
                 modifier = Modifier.width(300.dp),
                 drawerContainerColor = MaterialTheme.colorScheme.surface
             ) {
-                // --- هدر منو ---
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -169,10 +148,8 @@ fun MainNavigationApp(vm: ScannerViewModel) {
                         )
                     }
                 }
-
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // --- آیتم‌های ناوبری ---
                 val menuItems = listOf(
                     Screen.ScannerHome,
                     Screen.Converter,
@@ -181,7 +158,6 @@ fun MainNavigationApp(vm: ScannerViewModel) {
                     Screen.FreeConfigs,
                     Screen.SpeedTest
                 )
-
                 Column(modifier = Modifier.weight(1f)) {
                     menuItems.forEach { screen ->
                         NavigationDrawerItem(
@@ -205,10 +181,8 @@ fun MainNavigationApp(vm: ScannerViewModel) {
                         )
                     }
                 }
-
-                // --- بخش آپدیت اصلاح شده در منو ---
                 Divider(modifier = Modifier.padding(horizontal = 16.dp))
-                UpdateMenuItem(context, currentVersionCode)
+                UpdateMenuItem(currentVersionCode)
             }
         }
     ) {
@@ -239,56 +213,15 @@ fun MainNavigationApp(vm: ScannerViewModel) {
     }
 }
 
-// تابع جدید برای گرفتن اطلاعات کامل آپدیت از فایل JSON
-suspend fun fetchUpdateInfo(): UpdateInfo? {
-    return withContext(Dispatchers.IO) {
-        val client = okhttp3.OkHttpClient()
-        // یک فایل update.json در گیت‌هاب بسازید
-        val url =
-            "https://raw.githubusercontent.com/yadegaran/Tools-Networrk/refs/heads/master/update.json"
-        try {
-            val request = okhttp3.Request.Builder().url(url).build()
-            val response = client.newCall(request).execute()
-            val jsonData = response.body?.string() ?: return@withContext null
-            val obj = JSONObject(jsonData)
-            UpdateInfo(
-                versionCode = obj.getInt("versionCode"),
-                downloadUrl = obj.getString("downloadUrl"),
-                mirrorUrl = obj.getString("mirrorUrl"),
-                changeLog = obj.getString("changeLog")
-            )
-        } catch (e: Exception) {
-            null
-        }
-    }
-}
-
 @Composable
-fun AppNavHost(navController: NavHostController, vm: ScannerViewModel) {
-    NavHost(
-        navController = navController,
-        startDestination = Screen.ScannerHome.route
-    ) {
-        // صفحه اصلی مستقیماً به اسکنر متصل شد
-        composable(Screen.ScannerHome.route) { ScannerApp(vm) }
-
-        composable(Screen.Converter.route) { ConverterScreen(vm) }
-        composable(Screen.DnsFinder.route) { DnsFinderScreen(vm) }
-        composable(Screen.NetworkTools.route) { NetworkToolsScreen(vm) }
-        composable(Screen.FreeConfigs.route) { FreeConfigScreen() }
-        composable(Screen.SpeedTest.route) { SpeedTestScreen(vm) }
-    }
-}
-
-@Composable
-fun UpdateMenuItem(context: Context, currentVersionCode: Int) {
+fun UpdateMenuItem(currentVersionCode: Int) {
+    val context = LocalContext.current
     var hasUpdate by remember { mutableStateOf(false) }
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
-    val currentVersionName = getAppVersion(context) // استفاده از تابع خودتان
-
+    val currentVersionName = remember { UpdateManager.updateManager.getAppVersionName(context) }
 
     LaunchedEffect(Unit) {
-        val info = fetchUpdateInfo()
+        val info = UpdateManager.updateManager.fetchUpdateInfo()
         if (info != null && info.versionCode > currentVersionCode) {
             updateInfo = info
             hasUpdate = true
@@ -300,14 +233,10 @@ fun UpdateMenuItem(context: Context, currentVersionCode: Int) {
             .fillMaxWidth()
             .clickable {
                 if (hasUpdate && updateInfo != null) {
-                    startDownload(context, updateInfo!!.downloadUrl)
+                    UpdateManager.updateManager.startDownload(context, updateInfo!!.downloadUrl)
                 } else {
                     Toast
-                        .makeText(
-                            context,
-                            "در صورت وجود نسخه جدید اطلاع داده می شود.",
-                            Toast.LENGTH_SHORT
-                        )
+                        .makeText(context, "نسخه شما به‌روز است.", Toast.LENGTH_SHORT)
                         .show()
                 }
             }
@@ -321,11 +250,7 @@ fun UpdateMenuItem(context: Context, currentVersionCode: Int) {
         )
         Spacer(modifier = Modifier.width(12.dp))
         Column {
-            Text(
-                "نسخه $currentVersionName",
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            ) // داینامیک شد
+            Text("نسخه $currentVersionName", fontSize = 14.sp, fontWeight = FontWeight.Bold)
             Text(
                 if (hasUpdate) "آپدیت جدید آماده دانلود است" else "بررسی آپدیت از گیت‌هاب",
                 fontSize = 11.sp,
@@ -335,77 +260,36 @@ fun UpdateMenuItem(context: Context, currentVersionCode: Int) {
     }
 }
 
-
-// کلاس ساده برای مدل ورژن
-data class UpdateInfo(
-    val versionCode: Int,
-    val downloadUrl: String,
-    val mirrorUrl: String,
-    val changeLog: String
-)
-
-// تابع دانلود فایل APK
-fun startDownload(context: Context, url: String) {
-    try {
-        // باز کردن مستقیم لینک در مرورگر برای اطمینان ۱۰۰ درصدی از دانلود
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-
-        Toast.makeText(context, "در حال انتقال به مرورگر برای دانلود ایمن...", Toast.LENGTH_LONG)
-            .show()
-    } catch (e: Exception) {
-        Toast.makeText(context, "خطا در باز کردن مرورگر!", Toast.LENGTH_SHORT).show()
-    }
-}
-
 @Composable
-fun UpdateDialog(
-    updateInfo: UpdateInfo,
-    onDismiss: () -> Unit,
-    context: Context
-) {
+fun UpdateDialog(updateInfo: UpdateInfo, onDismiss: () -> Unit) {
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("نسخه جدید در دسترس است!", fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                Text(updateInfo.changeLog)
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-        },
+        text = { Text(updateInfo.changeLog) },
         confirmButton = {
             Button(
                 onClick = {
-                    startDownload(context, updateInfo.downloadUrl)
+                    UpdateManager.updateManager.startDownload(context, updateInfo.downloadUrl)
                     onDismiss()
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
             ) { Text("دانلود مستقیم") }
-        },dismissButton = {
-            Button(onClick = onDismiss) { Text("فعلاً نه") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("فعلاً نه") }
         }
-
-        )
+    )
 }
 
-// تابعی برای گرفتن نسخه فعلی اپلیکیشن
-fun getAppVersion(context: Context): String {
-    return try {
-        val packageInfo =
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                context.packageManager.getPackageInfo(
-                    context.packageName,
-                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.getPackageInfo(context.packageName, 0)
-            }
-        packageInfo.versionName ?: "1.0.0"
-    } catch (e: Exception) {
-        e.printStackTrace()
-        "1.0.0"
+@Composable
+fun AppNavHost(navController: NavHostController, vm: ScannerViewModel) {
+    NavHost(navController = navController, startDestination = Screen.ScannerHome.route) {
+        composable(Screen.ScannerHome.route) { ScannerApp(vm) }
+        composable(Screen.Converter.route) { ConverterScreen(vm) }
+        composable(Screen.DnsFinder.route) { DnsFinderScreen(vm) }
+        composable(Screen.NetworkTools.route) { NetworkToolsScreen(vm) }
+        composable(Screen.FreeConfigs.route) { FreeConfigScreen() }
+        composable(Screen.SpeedTest.route) { SpeedTestScreen(vm) }
     }
 }
-

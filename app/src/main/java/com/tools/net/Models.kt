@@ -12,3 +12,5 @@ data class IpScanResult(
     var mtu: Int = 1420,
     var packetLoss: Int = 0
 )
+
+
