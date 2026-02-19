@@ -172,19 +172,16 @@ class ScannerViewModel : ViewModel() {
             currentProgress = 0f
             scanResults.clear()
 
-            // ۱. تست سلامت IP (بررسی بلاک نبودن کلی سرور)
-            currentTestInfo = "در حال بررسی سلامت IP سرور..."
-            val isAlive = checkServerHealth(targetHost)
-            if (!isAlive) {
-                currentTestInfo = "❌ خطا: IP سرور مسدود است یا پاسخی نمی‌دهد."
+            currentTestInfo = "در حال بررسی سلامت IP..."
+            if (!checkServerHealth(targetHost)) {
+                currentTestInfo = "❌ سرور در دسترس نیست."
                 isScanningg = false
                 return@launch
             }
 
-            // ۲. بازه‌های بسیار دقیق (1 تا 20 یکی‌یکی و مابقی پله‌ای)
-            val lengths =
-                (1..20).toList() + listOf(30, 40, 50, 60, 80, 100, 150, 200, 300, 400, 500)
-            val intervals = (1..5).toList() + listOf(10, 15, 20, 30, 40, 50)
+            // بازه‌های تست (بر اساس تجربه‌های موفق در ایران)
+            val lengths = listOf(10, 20, 30, 40, 50, 80, 100, 150, 200)
+            val intervals = listOf(1, 2, 5, 10, 15, 20, 30, 50)
 
             val totalSteps = lengths.size * intervals.size
             var completedSteps = 0
@@ -192,58 +189,51 @@ class ScannerViewModel : ViewModel() {
             for (len in lengths) {
                 for (inter in intervals) {
                     if (!isScanningg) return@launch
+                    currentTestInfo = "تست پکت: $len بایت | تاخیر: $inter میلی‌ثانیه"
 
-                    currentTestInfo = "تست: $len-$inter"
-                    val testResult = performTest(targetHost, 443, len, inter)
-
-                    if (testResult != null && testResult.stability > 50) {
+                    val result = performProfessionalTest(targetHost, 443, len, inter)
+                    if (result != null && result.stability > 50) {
                         withContext(Dispatchers.Main) {
-                            scanResults.add(testResult)
-                            // مرتب‌سازی هوشمند: اولویت با پایداری 100 و سپس کمترین پینگ
+                            scanResults.add(result)
                             scanResults.sortWith(compareByDescending<FragmentResult> { it.stability }.thenBy { it.latency })
                         }
                     }
-
                     completedSteps++
                     currentProgress = completedSteps.toFloat() / totalSteps
                 }
             }
-            currentTestInfo = "اسکن کامل شد ✅ بهترین نتیجه در بالای لیست قرار دارد."
+            currentTestInfo = "اسکن با موفقیت تمام شد ✅"
             isScanningg = false
         }
     }
 
-    private fun checkServerHealth(host: String): Boolean {
-        return try {
-            val socket = java.net.Socket()
-            socket.connect(java.net.InetSocketAddress(host, 443), 2000)
-            socket.close()
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private fun performTest(host: String, port: Int, len: Int, inter: Int): FragmentResult? {
+    private fun performProfessionalTest(
+        host: String,
+        port: Int,
+        len: Int,
+        inter: Int
+    ): FragmentResult? {
         val start = System.currentTimeMillis()
         var successCount = 0
-        val retryCount = 2 // برای سرعت بیشتر در بازه بزرگ، هر مورد 2 بار تست می‌شود
+        val retryCount = 3 // تست ۳ مرحله‌ای برای تعیین دقیق پایداری
+
+        // شبیه‌سازی پکت TLS Client Hello
+        val tlsData = ByteArray(250) { it.toByte() }
 
         try {
             repeat(retryCount) {
-                val socket = Socket()
-                socket.connect(InetSocketAddress(host, port), 1200) // تایم‌اوت 1.2 ثانیه
-
+                val socket = java.net.Socket()
+                socket.connect(java.net.InetSocketAddress(host, port), 1500)
                 val out = socket.outputStream
-                val dummyData = ByteArray(200) { it.toByte() }
 
-                dummyData.toList().chunked(len).forEach { chunk ->
+                // خرد کردن پکت دقیقا مشابه موتور V2Ray
+                tlsData.toList().chunked(len).forEach { chunk ->
                     out.write(chunk.toByteArray())
                     out.flush()
                     if (inter > 0) Thread.sleep(inter.toLong())
                 }
 
-                socket.soTimeout = 800
+                socket.soTimeout = 1000
                 if (socket.inputStream.read() != -1) successCount++
                 socket.close()
             }
@@ -251,12 +241,28 @@ class ScannerViewModel : ViewModel() {
             if (successCount > 0) {
                 val latency = (System.currentTimeMillis() - start) / retryCount
                 val stability = (successCount.toFloat() / retryCount * 100).toInt()
-                return FragmentResult(len, inter, latency, stability)
+
+                // ایجاد بازه‌های پیشنهادی برای فیلد V2Ray
+                val lRange = if (len <= 20) "1-$len" else "${len - 15}-$len"
+                val iRange = if (inter <= 5) "1-$inter" else "${inter / 2}-$inter"
+
+                return FragmentResult(lRange, iRange, len, inter, latency, stability)
             }
         } catch (e: Exception) {
             return null
         }
         return null
+    }
+
+    private fun checkServerHealth(host: String): Boolean {
+        return try {
+            val s = java.net.Socket()
+            s.connect(java.net.InetSocketAddress(host, 443), 2000)
+            s.close()
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     fun stopScan() {

@@ -1,5 +1,8 @@
 package com.tools.net
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -185,8 +189,12 @@ fun MainNavigationApp(vm: ScannerViewModel) {
                         )
                     }
                 }
-                Divider(modifier = Modifier.padding(horizontal = 16.dp))
-                UpdateMenuItem(currentVersionCode)
+                Divider(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+
+                Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                    UpdateMenuItem(UpdateManager.updateManager.getCurrentVersionCode(context))
+                    GitHubMenuItem(context)
+                }
             }
         }
     ) {
@@ -297,5 +305,49 @@ fun AppNavHost(navController: NavHostController, vm: ScannerViewModel) {
         composable(Screen.SpeedTest.route) { SpeedTestScreen(vm) }
         composable(Screen.FragmentFinder.route) { FragmentFinderScreen(vm) }
         composable(Screen.SupportScreen.route) { SupportScreen(vm) }
+    }
+}
+
+@Composable
+fun GitHubMenuItem(context: Context) {
+    val githubUrl = "https://github.com/yadegaran/Tools-Networrk"
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        color = Color.Transparent, // یا MaterialTheme.colorScheme.surfaceVariant برای پس‌زمینه ملایم
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Row(
+            modifier = Modifier
+                .clickable {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(githubUrl))
+                    context.startActivity(intent)
+                }
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Build, // آیکون ابزار یا ساخت
+                contentDescription = null,
+                tint = Color(0xFF607D8B), // رنگ خاکستری-آبی (Steel Grey)
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = "مشاهده سورس در گیت‌هاب",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                )
+                Text(
+                    text = "github.com/yadegaran",
+                    fontSize = 10.sp,
+                    color = Color.Gray
+                )
+            }
+        }
     }
 }

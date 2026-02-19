@@ -23,8 +23,10 @@ data class UpdateInfo(
 
 
 data class FragmentResult(
-    val length: Int,
-    val interval: Int,
+    val lengthRange: String,   // نمایش بازه طول: مثلا "20-40"
+    val intervalRange: String, // نمایش بازه زمان: مثلا "10-20"
+    val length: Int,           // مقدار عددی جهت محاسبات احتمالی
+    val interval: Int,         // مقدار عددی جهت محاسبات احتمالی
     val latency: Long,
     val stability: Int
 )
