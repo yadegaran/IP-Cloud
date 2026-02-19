@@ -109,7 +109,16 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainNavigationApp(vm: ScannerViewModel) {
     val context = LocalContext.current
-    val currentVersionCode = 1 // نسخه فعلی اپلیکیشن شما
+    val currentVersionCode = try {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            context.packageManager.getPackageInfo(context.packageName, 0).longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, 0).versionCode
+        }
+    } catch (e: Exception) {
+        1
+    }
 
     var showDialog by remember { mutableStateOf(false) }
     var updateData by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -294,7 +303,11 @@ fun UpdateMenuItem(context: Context, currentVersionCode: Int) {
                     startDownload(context, updateInfo!!.downloadUrl)
                 } else {
                     Toast
-                        .makeText(context, "در صورت وجود نسخه جدید اطلاع داده می شود.", Toast.LENGTH_SHORT)
+                        .makeText(
+                            context,
+                            "در صورت وجود نسخه جدید اطلاع داده می شود.",
+                            Toast.LENGTH_SHORT
+                        )
                         .show()
                 }
             }
@@ -339,7 +352,8 @@ fun startDownload(context: Context, url: String) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
 
-        Toast.makeText(context, "در حال انتقال به مرورگر برای دانلود ایمن...", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, "در حال انتقال به مرورگر برای دانلود ایمن...", Toast.LENGTH_LONG)
+            .show()
     } catch (e: Exception) {
         Toast.makeText(context, "خطا در باز کردن مرورگر!", Toast.LENGTH_SHORT).show()
     }
@@ -368,7 +382,9 @@ fun UpdateDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
             ) { Text("دانلود مستقیم") }
-        },
+        },dismissButton = {
+            Button(onClick = onDismiss) { Text("فعلاً نه") }
+        }
 
         )
 }
@@ -376,15 +392,16 @@ fun UpdateDialog(
 // تابعی برای گرفتن نسخه فعلی اپلیکیشن
 fun getAppVersion(context: Context): String {
     return try {
-        val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            context.packageManager.getPackageInfo(
-                context.packageName,
-                android.content.pm.PackageManager.PackageInfoFlags.of(0)
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            context.packageManager.getPackageInfo(context.packageName, 0)
-        }
+        val packageInfo =
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
         packageInfo.versionName ?: "1.0.0"
     } catch (e: Exception) {
         e.printStackTrace()
