@@ -12,12 +12,7 @@ import org.json.JSONObject
 
 // مدل داده ورژن
 
-data class UpdateInfo(
-    val versionCode: Int,
-    val downloadUrl: String,
-    val mirrorUrl: String,
-    val changeLog: String
-)
+
 
 class UpdateManager {
     object updateManager {

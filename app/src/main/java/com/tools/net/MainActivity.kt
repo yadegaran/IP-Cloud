@@ -69,10 +69,12 @@ import kotlinx.coroutines.launch
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object ScannerHome : Screen("scanner", "اسکنر ای پی", Icons.Default.Search)
     data object Converter : Screen("converter", "مبدل کانفیگ", Icons.Default.Build)
-    data object DnsFinder : Screen("dns", "DNS یاب", Icons.Default.Settings)
-    data object NetworkTools : Screen("tools", "تست شبکه", Icons.Default.Info)
+    data object DnsFinder : Screen("dns", "DNS یاب", Icons.Default.Refresh) // تغییر آیکون
+    data object NetworkTools : Screen("tools", "تست شبکه", Icons.Default.Settings) // تغییر آیکون
     data object SpeedTest : Screen("speed", "تست سرعت", Icons.Default.PlayArrow)
-    data object FreeConfigs : Screen("free_configs", "کانفیگ رایگان", Icons.Default.Refresh)
+    data object FreeConfigs : Screen("free_configs", "کانفیگ رایگان", Icons.Default.Menu) // تغییر آیکون
+    data object FragmentFinder : Screen("fragment_finder", "فرگمنت یاب", Icons.Default.Build)
+    data object SupportScreen : Screen("support", "عیب یابی", Icons.Default.Info) // تغییر مسیر و آیکون
 }
 
 class MainActivity : ComponentActivity() {
@@ -156,7 +158,9 @@ fun MainNavigationApp(vm: ScannerViewModel) {
                     Screen.DnsFinder,
                     Screen.NetworkTools,
                     Screen.FreeConfigs,
-                    Screen.SpeedTest
+                    Screen.SpeedTest,
+                    Screen.FragmentFinder,
+                    Screen.SupportScreen
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     menuItems.forEach { screen ->
@@ -291,5 +295,7 @@ fun AppNavHost(navController: NavHostController, vm: ScannerViewModel) {
         composable(Screen.NetworkTools.route) { NetworkToolsScreen(vm) }
         composable(Screen.FreeConfigs.route) { FreeConfigScreen() }
         composable(Screen.SpeedTest.route) { SpeedTestScreen(vm) }
+        composable(Screen.FragmentFinder.route) { FragmentFinderScreen(vm) }
+        composable(Screen.SupportScreen.route) { SupportScreen(vm) }
     }
 }

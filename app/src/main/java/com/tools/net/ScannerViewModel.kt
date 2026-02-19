@@ -1,23 +1,43 @@
 package com.tools.net
 
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import java.net.*
+import kotlinx.coroutines.withContext
+import java.net.InetSocketAddress
+import java.net.Socket
 import kotlin.random.Random
 
 class ScannerViewModel : ViewModel() {
     val foundIps = mutableStateListOf<IpScanResult>()
-    val isScanning = mutableStateOf(false)
+    var isScanning = mutableStateOf(false)
     val ipRanges = NetworkData.IP_RANGES
-
+    var isScanningg by mutableStateOf(false)
     val selectedIpForConverter = mutableStateOf("")
 
-    fun startScan(selectedRanges: List<String>, threads: Int, timeout: Int, maxResults: Int, userPort: Int) {
+    val scanResults = mutableStateListOf<FragmentResult>()
+
+    var currentProgress by mutableStateOf(0f)
+    var currentTestInfo by mutableStateOf("آماده برای اسکن")
+
+    var analysisResults = mutableStateListOf<AnalysisStep>()
+    var isAnalyzing by mutableStateOf(false)
+
+    fun startScan(
+        selectedRanges: List<String>,
+        threads: Int,
+        timeout: Int,
+        maxResults: Int,
+        userPort: Int
+    ) {
         viewModelScope.launch(Dispatchers.Default) {
             isScanning.value = true
             foundIps.clear()
@@ -32,7 +52,8 @@ class ScannerViewModel : ViewModel() {
                         if (!isScanning.value) return@launch
 
                         // ۱. انتخاب رنج و تولید آی‌پی هوشمند
-                        val range = if (selectedRanges.isEmpty()) ipRanges.random() else selectedRanges.random()
+                        val range =
+                            if (selectedRanges.isEmpty()) ipRanges.random() else selectedRanges.random()
                         val ip = generateSmartIp(range)
                         val port = userPort
 
@@ -91,13 +112,18 @@ class ScannerViewModel : ViewModel() {
     // متد بهبود یافته برای تولید آی‌پی‌های متنوع‌تر در رنج
     private fun generateSmartIp(range: String): String {
         val parts = range.split("/")[0].split(".")
-        val mask = try { range.split("/")[1].toInt() } catch (e: Exception) { 24 }
+        val mask = try {
+            range.split("/")[1].toInt()
+        } catch (e: Exception) {
+            24
+        }
 
         return when {
             mask <= 16 -> {
                 // برای رنج‌های بزرگ مثل 172.64.0.0/16
                 "${parts[0]}.${parts[1]}.${Random.nextInt(0, 255)}.${Random.nextInt(1, 254)}"
             }
+
             else -> {
                 // برای رنج‌های معمولی /24
                 "${parts[0]}.${parts[1]}.${parts[2]}.${Random.nextInt(1, 254)}"
@@ -105,37 +131,252 @@ class ScannerViewModel : ViewModel() {
         }
     }
 
-    private suspend fun checkSocket(ip: String, port: Int, timeout: Int) = withContext(Dispatchers.IO) {
-        var successfulAttempts = 0
-        val totalAttempts = 5
-        var totalLatency = 0L
+    private suspend fun checkSocket(ip: String, port: Int, timeout: Int) =
+        withContext(Dispatchers.IO) {
+            var successfulAttempts = 0
+            val totalAttempts = 5
+            var totalLatency = 0L
 
-        for (i in 1..totalAttempts) {
-            val start = System.currentTimeMillis()
-            try {
-                val socket = Socket()
-                socket.connect(InetSocketAddress(ip, port), timeout)
-                socket.close()
-                successfulAttempts++
-                totalLatency += (System.currentTimeMillis() - start)
-            } catch (e: Exception) {
-                // این تلاش شکست خورد
+            for (i in 1..totalAttempts) {
+                val start = System.currentTimeMillis()
+                try {
+                    val socket = Socket()
+                    socket.connect(InetSocketAddress(ip, port), timeout)
+                    socket.close()
+                    successfulAttempts++
+                    totalLatency += (System.currentTimeMillis() - start)
+                } catch (e: Exception) {
+                    // این تلاش شکست خورد
+                }
+                delay(20) // وقفه کوتاه بین هر پکت
             }
-            delay(20) // وقفه کوتاه بین هر پکت
+
+            if (successfulAttempts > 0) {
+                val avgLatency = totalLatency / successfulAttempts
+                val lossPercent = ((totalAttempts - successfulAttempts) * 100) / totalAttempts
+                IpScanResult(
+                    ip = ip,
+                    port = port,
+                    latency = avgLatency,
+                    isSuccess = true,
+                    packetLoss = lossPercent
+                )
+            } else {
+                IpScanResult(ip, port, -1, isSuccess = false, packetLoss = 100)
+            }
         }
 
-        if (successfulAttempts > 0) {
-            val avgLatency = totalLatency / successfulAttempts
-            val lossPercent = ((totalAttempts - successfulAttempts) * 100) / totalAttempts
-            IpScanResult(
-                ip = ip,
-                port = port,
-                latency = avgLatency,
-                isSuccess = true,
-                packetLoss = lossPercent
-            )
-        } else {
-            IpScanResult(ip, port, -1, isSuccess = false, packetLoss = 100)
+    fun startDeepFragmentScan(targetHost: String = "1.1.1.1") {
+        viewModelScope.launch(Dispatchers.IO) {
+            isScanningg = true
+            currentProgress = 0f
+            scanResults.clear()
+
+            // ۱. تست سلامت IP (بررسی بلاک نبودن کلی سرور)
+            currentTestInfo = "در حال بررسی سلامت IP سرور..."
+            val isAlive = checkServerHealth(targetHost)
+            if (!isAlive) {
+                currentTestInfo = "❌ خطا: IP سرور مسدود است یا پاسخی نمی‌دهد."
+                isScanningg = false
+                return@launch
+            }
+
+            // ۲. بازه‌های بسیار دقیق (1 تا 20 یکی‌یکی و مابقی پله‌ای)
+            val lengths =
+                (1..20).toList() + listOf(30, 40, 50, 60, 80, 100, 150, 200, 300, 400, 500)
+            val intervals = (1..5).toList() + listOf(10, 15, 20, 30, 40, 50)
+
+            val totalSteps = lengths.size * intervals.size
+            var completedSteps = 0
+
+            for (len in lengths) {
+                for (inter in intervals) {
+                    if (!isScanningg) return@launch
+
+                    currentTestInfo = "تست: $len-$inter"
+                    val testResult = performTest(targetHost, 443, len, inter)
+
+                    if (testResult != null && testResult.stability > 50) {
+                        withContext(Dispatchers.Main) {
+                            scanResults.add(testResult)
+                            // مرتب‌سازی هوشمند: اولویت با پایداری 100 و سپس کمترین پینگ
+                            scanResults.sortWith(compareByDescending<FragmentResult> { it.stability }.thenBy { it.latency })
+                        }
+                    }
+
+                    completedSteps++
+                    currentProgress = completedSteps.toFloat() / totalSteps
+                }
+            }
+            currentTestInfo = "اسکن کامل شد ✅ بهترین نتیجه در بالای لیست قرار دارد."
+            isScanningg = false
         }
     }
+
+    private fun checkServerHealth(host: String): Boolean {
+        return try {
+            val socket = java.net.Socket()
+            socket.connect(java.net.InetSocketAddress(host, 443), 2000)
+            socket.close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun performTest(host: String, port: Int, len: Int, inter: Int): FragmentResult? {
+        val start = System.currentTimeMillis()
+        var successCount = 0
+        val retryCount = 2 // برای سرعت بیشتر در بازه بزرگ، هر مورد 2 بار تست می‌شود
+
+        try {
+            repeat(retryCount) {
+                val socket = Socket()
+                socket.connect(InetSocketAddress(host, port), 1200) // تایم‌اوت 1.2 ثانیه
+
+                val out = socket.outputStream
+                val dummyData = ByteArray(200) { it.toByte() }
+
+                dummyData.toList().chunked(len).forEach { chunk ->
+                    out.write(chunk.toByteArray())
+                    out.flush()
+                    if (inter > 0) Thread.sleep(inter.toLong())
+                }
+
+                socket.soTimeout = 800
+                if (socket.inputStream.read() != -1) successCount++
+                socket.close()
+            }
+
+            if (successCount > 0) {
+                val latency = (System.currentTimeMillis() - start) / retryCount
+                val stability = (successCount.toFloat() / retryCount * 100).toInt()
+                return FragmentResult(len, inter, latency, stability)
+            }
+        } catch (e: Exception) {
+            return null
+        }
+        return null
+    }
+
+    fun stopScan() {
+        isScanningg = false
+        currentTestInfo = "اسکن متوقف شد"
+    }
+
+
+    fun runFullDiagnostics(targetHost: String = "1.1.1.1") {
+        viewModelScope.launch(Dispatchers.IO) {
+            isAnalyzing = true
+            analysisResults.clear()
+
+            // مرحله ۱: اینترنت
+            analysisResults.add(
+                AnalysisStep(
+                    "اتصال اینترنت",
+                    AnalysisStatus.LOADING,
+                    "در حال بررسی..."
+                )
+            )
+            val hasNet = checkInternet()
+            updateStep(
+                0, if (hasNet) AnalysisStatus.SUCCESS else AnalysisStatus.ERROR,
+                if (hasNet) "اینترنت وصل است." else "شما به اینترنت متصل نیستید!"
+            )
+
+            if (!hasNet) {
+                isAnalyzing = false; return@launch
+            }
+
+            // مرحله ۲: ساعت سیستم
+            analysisResults.add(
+                AnalysisStep(
+                    "ساعت سیستم",
+                    AnalysisStatus.LOADING,
+                    "در حال بررسی..."
+                )
+            )
+            val timeDiff = checkSystemTime()
+            updateStep(
+                1, if (timeDiff < 30000) AnalysisStatus.SUCCESS else AnalysisStatus.ERROR,
+                if (timeDiff < 30000) "ساعت دقیق است." else "اختلال در ساعت (بیش از ۳۰ ثانیه اختلاف)!"
+            )
+
+            // مرحله ۳: DNS
+            analysisResults.add(
+                AnalysisStep(
+                    "وضعیت DNS",
+                    AnalysisStatus.LOADING,
+                    "در حال بررسی..."
+                )
+            )
+            val dnsOk = checkDNS()
+            updateStep(
+                2, if (dnsOk) AnalysisStatus.SUCCESS else AnalysisStatus.WARNING,
+                if (dnsOk) "DNS سالم است." else "اختلال در DNS (احتمال فیلترینگ DNS)."
+            )
+
+            // مرحله ۴: سلامت سرور
+            analysisResults.add(
+                AnalysisStep(
+                    "وضعیت سرور",
+                    AnalysisStatus.LOADING,
+                    "در حال بررسی..."
+                )
+            )
+            val serverAlive = checkServerHealth(targetHost)
+            updateStep(
+                3, if (serverAlive) AnalysisStatus.SUCCESS else AnalysisStatus.ERROR,
+                if (serverAlive) "سرور در دسترس است." else "سرور پاسخ نمی‌دهد (احتمال فیلتر IP)."
+            )
+
+            isAnalyzing = false
+        }
+    }
+
+    private fun updateStep(index: Int, status: AnalysisStatus, message: String) {
+        if (index < analysisResults.size) {
+            analysisResults[index] = analysisResults[index].copy(status = status, message = message)
+        }
+    }
+
+    // --- توابع اجرایی تست‌ها ---
+
+    private fun checkInternet(): Boolean {
+        return try {
+            val timeoutMs = 1500
+            val socket = java.net.Socket()
+            socket.connect(java.net.InetSocketAddress("8.8.8.8", 53), timeoutMs)
+            socket.close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun checkDNS(): Boolean {
+        return try {
+            val address = java.net.InetAddress.getByName("google.com")
+            address.hostAddress.isNotEmpty()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun checkSystemTime(): Long {
+        // در حالت ایده آل باید با سرور NTP چک شود،
+        // فعلاً برای سادگی فرض میکنیم اگر DNS و اینترنت وصل باشد، زمان سیستم را با زمان دریافت شده از هدر یک سایت مقایسه میکنیم.
+        return try {
+            val url = java.net.URL("https://google.com")
+            val connection = url.openConnection()
+            connection.connectTimeout = 2000
+            val serverDate = connection.getHeaderFieldDate("Date", 0)
+            if (serverDate == 0L) return 0L
+            Math.abs(System.currentTimeMillis() - serverDate)
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+
 }
